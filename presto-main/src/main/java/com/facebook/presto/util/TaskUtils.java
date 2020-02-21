@@ -13,8 +13,11 @@
  */
 package com.facebook.presto.util;
 
+import com.facebook.airlift.http.client.HttpUriBuilder;
 import io.airlift.units.Duration;
 
+import java.net.URI;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -31,5 +34,16 @@ public class TaskUtils
         // Randomize in [T/2, T], so wait is not near zero and the client-supplied max wait time is respected
         long halfWaitMillis = waitTime.toMillis() / 2;
         return new Duration(halfWaitMillis + ThreadLocalRandom.current().nextLong(halfWaitMillis), MILLISECONDS);
+    }
+
+    public static Optional<URI> getAsyncPageTransportLocaton(URI location, boolean asyncPageTransportEnabled)
+    {
+        if (asyncPageTransportEnabled) {
+            String path = location.getPath().replace("v1/task", "v1/task/async");
+            return Optional.of(HttpUriBuilder.uriBuilderFrom(location).replacePath(path).build());
+        }
+        else {
+            return Optional.empty();
+        }
     }
 }

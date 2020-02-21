@@ -41,6 +41,7 @@ import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -52,6 +53,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.facebook.presto.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR;
 import static com.facebook.presto.spi.block.PageBuilderStatus.DEFAULT_MAX_PAGE_SIZE_IN_BYTES;
+import static com.facebook.presto.util.TaskUtils.getAsyncPageTransportLocaton;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Throwables.throwIfUnchecked;
@@ -89,6 +91,7 @@ public class ExchangeClient
     private final HttpClient httpClient;
     private final DriftClient<ThriftTaskClient> driftClient;
     private final ScheduledExecutorService scheduler;
+    private boolean asyncPageTransportEnabled;
 
     @GuardedBy("this")
     private boolean noMoreLocations;
@@ -130,6 +133,7 @@ public class ExchangeClient
             int concurrentRequestMultiplier,
             Duration maxErrorDuration,
             boolean acknowledgePages,
+            boolean asyncPageTransportEnabled,
             double responseSizeExponentialMovingAverageDecayingAlpha,
             HttpClient httpClient,
             DriftClient<ThriftTaskClient> driftClient,
@@ -143,6 +147,7 @@ public class ExchangeClient
         this.concurrentRequestMultiplier = concurrentRequestMultiplier;
         this.maxErrorDuration = maxErrorDuration;
         this.acknowledgePages = acknowledgePages;
+        this.asyncPageTransportEnabled = asyncPageTransportEnabled;
         this.httpClient = httpClient;
         this.driftClient = driftClient;
         this.scheduler = scheduler;
@@ -194,10 +199,11 @@ public class ExchangeClient
         checkState(!noMoreLocations, "No more locations already set");
 
         RpcShuffleClient resultClient;
+        Optional<URI> asyncPageTransportLocation = getAsyncPageTransportLocaton(location, asyncPageTransportEnabled);
         switch (location.getScheme().toLowerCase(Locale.ENGLISH)) {
             case "http":
             case "https":
-                resultClient = new HttpRpcShuffleClient(httpClient, location);
+                resultClient = new HttpRpcShuffleClient(httpClient, location, asyncPageTransportLocation);
                 break;
             case "thrift":
                 resultClient = new ThriftRpcShuffleClient(driftClient, location);
@@ -211,6 +217,7 @@ public class ExchangeClient
                 maxErrorDuration,
                 acknowledgePages,
                 location,
+                asyncPageTransportLocation,
                 new ExchangeClientCallback(),
                 scheduler,
                 pageBufferClientCallbackExecutor);

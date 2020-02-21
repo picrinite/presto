@@ -37,6 +37,7 @@ public class ExchangeClientConfig
     private int pageBufferClientMaxCallbackThreads = 25;
     private boolean acknowledgePages = true;
     private double responseSizeExponentialMovingAverageDecayingAlpha = 0.1;
+    private boolean asyncPageTransportEnabled = true;
 
     @NotNull
     public DataSize getMaxBufferSize()
@@ -88,6 +89,18 @@ public class ExchangeClientConfig
     public ExchangeClientConfig setMaxErrorDuration(Duration maxErrorDuration)
     {
         this.maxErrorDuration = maxErrorDuration;
+        return this;
+    }
+
+    public boolean isAsyncPageTransportEnabled()
+    {
+        return asyncPageTransportEnabled;
+    }
+
+    @Config("exchange.async-page-transport-enabled")
+    public ExchangeClientConfig setAsyncPageTransportEnabled(boolean asyncPageTransportEnabled)
+    {
+        this.asyncPageTransportEnabled = asyncPageTransportEnabled;
         return this;
     }
 
