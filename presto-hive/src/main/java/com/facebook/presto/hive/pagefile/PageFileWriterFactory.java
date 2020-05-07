@@ -93,7 +93,7 @@ public class PageFileWriterFactory
 
         try {
             FileSystem fileSystem = hdfsEnvironment.getFileSystem(session.getUser(), path, configuration);
-            DataSink dataSink = createPageDataSink(fileSystem, path);
+            DataSink dataSink = createDataSink(fileSystem, path);
 
             Callable<Void> rollbackAction = () -> {
                 fileSystem.delete(path, false);
@@ -104,6 +104,14 @@ public class PageFileWriterFactory
         catch (IOException e) {
             throw new PrestoException(HIVE_WRITER_OPEN_ERROR, "Error creating pagefile", e);
         }
+    }
+
+    protected DataSink createDataSink(
+            FileSystem fileSystem,
+            Path path)
+            throws IOException
+    {
+        return createPageDataSink(fileSystem, path);
     }
 
     public static void createEmptyPageFile(
