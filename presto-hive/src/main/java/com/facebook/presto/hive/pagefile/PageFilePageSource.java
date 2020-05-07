@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.hive.pagefile;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.common.Page;
 import com.facebook.presto.common.block.Block;
 import com.facebook.presto.common.block.BlockEncodingSerde;
@@ -33,6 +34,8 @@ import static java.util.Objects.requireNonNull;
 public class PageFilePageSource
         implements ConnectorPageSource
 {
+    private static final Logger log = Logger.get(PageFilePageSource.class);
+
     private final FSDataInputStream inputStream;
     private final Iterator<Page> pageReader;
     private final int[] hiveColumnIndexes;
@@ -157,19 +160,22 @@ public class PageFilePageSource
 
         long readStart = 0;
         long readEnd = 0;
-        boolean stripeFound = false;
+        int stripeCount = 0;
         for (int i = 0; i < stripeOffsets.size(); ++i) {
             if (splitContainsStripe(splitStart, splitLength, stripeOffsets.get(i))) {
-                if (!stripeFound) {
+                ++stripeCount;
+                if (1 == stripeCount) {
                     readStart = stripeOffsets.get(i);
-                    stripeFound = true;
                 }
                 readEnd = i == stripeOffsets.size() - 1 ? lastStripeEnd : stripeOffsets.get(i + 1);
             }
-            else if (stripeFound) {
+            else if (stripeCount > 0) {
                 break;
             }
         }
+
+        log.info("PageFile splitStart: %d, splitLength: %d, stripeCount: %d, readLength: %d",
+                splitStart, splitLength, stripeCount, readEnd - readStart);
 
         return new OffsetAndLength(readStart, readEnd - readStart);
     }
