@@ -64,6 +64,9 @@ public final class Page
         requireNonNull(blocks, "blocks is null");
         this.positionCount = positionCount;
         this.blocks = blocksCopyRequired ? blocks.clone() : blocks;
+        for (int i = 0; i < this.blocks.length; i++) {
+            requireNonNull(this.blocks[i], "block is null");
+        }
     }
 
     public int getChannelCount()

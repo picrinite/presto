@@ -24,7 +24,6 @@ import com.google.common.collect.ImmutableList;
 
 import static com.facebook.presto.common.block.ColumnarRow.toColumnarRow;
 import static com.facebook.presto.common.type.BooleanType.BOOLEAN;
-import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
 public abstract class KeyAndBlockPositionValueStateSerializer<T extends KeyAndBlockPositionValueState>
@@ -76,7 +75,11 @@ public abstract class KeyAndBlockPositionValueStateSerializer<T extends KeyAndBl
     @Override
     public void deserialize(Block block, int index, T state)
     {
-        checkArgument(block instanceof AbstractRowBlock);
+        requireNonNull(block, block.getClass().getName() + " is null");
+
+        if (!(block instanceof AbstractRowBlock)) {
+            throw new IllegalArgumentException("Invalid row block: " + block.getClass().getName());
+        }
         ColumnarRow columnarRow = toColumnarRow(block);
 
         state.setFirstNull(BOOLEAN.getBoolean(columnarRow.getField(0), index));
