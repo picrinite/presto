@@ -263,10 +263,14 @@ public class PrestoSparkTaskExecutorFactory
 
         List<TaskSource> taskSources = getTaskSources(serializedTaskSources);
 
-        log.info("Task [%s] received %d splits.",
+        log.info("Task [%s] received %d splits, total size in bytes is %d.",
                 taskId,
                 taskSources.stream()
                         .mapToInt(taskSource -> taskSource.getSplits().size())
+                        .sum(),
+                taskSources.stream()
+                        .flatMap(taskSource -> taskSource.getSplits().stream())
+                        .mapToLong(split -> split.getSplit().getConnectorSplit().getSplitSizeInBytes().orElse(0))
                         .sum());
 
         MemoryPool memoryPool = new MemoryPool(new MemoryPoolId("spark-executor-memory-pool"), maxTotalMemory);
