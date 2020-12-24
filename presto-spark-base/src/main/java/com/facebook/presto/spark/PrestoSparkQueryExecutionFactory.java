@@ -118,6 +118,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -166,8 +167,6 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Throwables.propagateIfPossible;
 import static com.google.common.base.Ticker.systemTicker;
 import static com.google.common.base.Verify.verify;
-import static com.google.common.collect.ImmutableList.toImmutableList;
-import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.util.concurrent.Futures.getUnchecked;
 import static io.airlift.units.DataSize.succinctBytes;
 import static java.lang.Math.max;
@@ -176,7 +175,9 @@ import static java.nio.file.Files.notExists;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.stream.Collectors.collectingAndThen;
 import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
 
 public class PrestoSparkQueryExecutionFactory
         implements IPrestoSparkQueryExecutionFactory
@@ -584,7 +585,7 @@ public class PrestoSparkQueryExecutionFactory
                 ImmutableList.of(),
                 plan.getChildren().stream()
                         .map(child -> createStageInfo(queryId, child, taskInfoMap))
-                        .collect(toImmutableList()),
+                        .collect(collectingAndThen(toList(), Collections::unmodifiableList)),
                 false);
     }
 
@@ -634,7 +635,7 @@ public class PrestoSparkQueryExecutionFactory
         List<String> columnNames = planAndMore.getFieldNames();
         List<Type> columnTypes = planAndMore.getPlan().getRoot().getOutputVariables().stream()
                 .map(VariableReferenceExpression::getType)
-                .collect(toImmutableList());
+                .collect(collectingAndThen(toList(), Collections::unmodifiableList));
         checkArgument(
                 columnNames.size() == columnTypes.size(),
                 "Column names and types size mismatch: %s != %s",
@@ -911,14 +912,19 @@ public class PrestoSparkQueryExecutionFactory
                 }
 
                 Map<String, JavaFutureAction<List<Tuple2<MutablePartitionId, PrestoSparkSerializedPage>>>> inputFutures = inputRdds.entrySet().stream()
-                        .collect(toImmutableMap(entry -> entry.getKey().toString(), entry -> entry.getValue().getRdd().collectAsync()));
+                        .collect(collectingAndThen(
+                                toMap(entry -> entry.getKey().toString(),
+                                        entry -> entry.getValue().getRdd().collectAsync()),
+                                Collections::unmodifiableMap));
 
                 waitForActionsCompletionWithTimeout(inputFutures.values(), computeNextTimeout(), MILLISECONDS);
 
                 Map<String, List<PrestoSparkSerializedPage>> inputs = inputFutures.entrySet().stream()
-                        .collect(toImmutableMap(
-                                Map.Entry::getKey,
-                                entry -> getUnchecked(entry.getValue()).stream().map(Tuple2::_2).collect(toImmutableList())));
+                        .collect(collectingAndThen(
+                                toMap(
+                                        Map.Entry::getKey,
+                                        entry -> getUnchecked(entry.getValue()).stream().map(Tuple2::_2).collect(collectingAndThen(toList(), Collections::unmodifiableList))),
+                                Collections::unmodifiableMap));
 
                 IPrestoSparkTaskExecutor<PrestoSparkSerializedPage> prestoSparkTaskExecutor = taskExecutorFactory.create(
                         0,
@@ -1001,7 +1007,7 @@ public class PrestoSparkQueryExecutionFactory
                     .map(SerializedTaskInfo::getBytes)
                     .map(PrestoSparkUtils::decompress)
                     .map(taskInfoJsonCodec::fromJson)
-                    .collect(toImmutableList());
+                    .collect(collectingAndThen(toList(), Collections::unmodifiableList));
             StageInfo stageInfo = createStageInfo(session.getQueryId(), fragmentedPlan, taskInfos);
             QueryState queryState = failureInfo.isPresent() ? FAILED : FINISHED;
 

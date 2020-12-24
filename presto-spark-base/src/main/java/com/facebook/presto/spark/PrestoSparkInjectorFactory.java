@@ -40,16 +40,18 @@ import com.google.inject.Injector;
 import com.google.inject.Module;
 import com.google.inject.Scopes;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Optional;
 
 import static com.facebook.presto.server.PrestoSystemRequirements.verifySystemTimeIsReasonable;
 import static com.facebook.presto.spark.classloader_interface.SparkProcessType.DRIVER;
-import static com.google.common.collect.ImmutableMap.toImmutableMap;
+import static java.util.Collections.unmodifiableMap;
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.collectingAndThen;
+import static java.util.stream.Collectors.toMap;
 
 public class PrestoSparkInjectorFactory
 {
@@ -103,13 +105,13 @@ public class PrestoSparkInjectorFactory
         this.sparkProcessType = requireNonNull(sparkProcessType, "sparkProcessType is null");
         this.configProperties = ImmutableMap.copyOf(requireNonNull(configProperties, "configProperties is null"));
         this.catalogProperties = requireNonNull(catalogProperties, "catalogProperties is null").entrySet().stream()
-                .collect(toImmutableMap(Entry::getKey, entry -> ImmutableMap.copyOf(entry.getValue())));
+                .collect(collectingAndThen(toMap(Map.Entry::getKey, entry -> unmodifiableMap(new HashMap<>(entry.getValue()))), Collections::unmodifiableMap));
         this.eventListenerProperties = requireNonNull(eventListenerProperties, "eventListenerProperties is null").map(ImmutableMap::copyOf);
         this.accessControlProperties = requireNonNull(accessControlProperties, "accessControlProperties is null").map(ImmutableMap::copyOf);
         this.sessionPropertyConfigurationProperties = requireNonNull(sessionPropertyConfigurationProperties, "sessionPropertyConfigurationProperties is null").map(ImmutableMap::copyOf);
         this.functionNamespaceProperties = requireNonNull(functionNamespaceProperties, "functionNamespaceProperties is null")
                 .map(map -> map.entrySet().stream()
-                        .collect(toImmutableMap(Map.Entry::getKey, entry -> ImmutableMap.copyOf(entry.getValue()))));
+                        .collect(collectingAndThen(toMap(Map.Entry::getKey, entry -> unmodifiableMap(new HashMap<>(entry.getValue()))), Collections::unmodifiableMap)));
         this.sqlParserOptions = requireNonNull(sqlParserOptions, "sqlParserOptions is null");
         this.additionalModules = ImmutableList.copyOf(requireNonNull(additionalModules, "additionalModules is null"));
         this.isForTesting = isForTesting;

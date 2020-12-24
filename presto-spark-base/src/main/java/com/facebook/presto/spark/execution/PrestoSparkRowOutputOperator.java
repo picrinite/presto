@@ -34,15 +34,17 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.airlift.slice.SliceOutput;
 import io.airlift.units.DataSize;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Function;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.collect.ImmutableList.toImmutableList;
 import static java.lang.Math.toIntExact;
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.collectingAndThen;
+import static java.util.stream.Collectors.toList;
 
 public class PrestoSparkRowOutputOperator
         implements Operator
@@ -91,7 +93,7 @@ public class PrestoSparkRowOutputOperator
                     partitioning.getPartitionChannels(),
                     partitioning.getPartitionConstants().stream()
                             .map(constant -> constant.map(ConstantExpression::getValueBlock))
-                            .collect(toImmutableList()),
+                            .collect(collectingAndThen(toList(), Collections::unmodifiableList)),
                     partitioning.isReplicateNullsAndAny(),
                     partitioning.getNullChannel(),
                     toIntExact(targetAverageRowSize.toBytes()));

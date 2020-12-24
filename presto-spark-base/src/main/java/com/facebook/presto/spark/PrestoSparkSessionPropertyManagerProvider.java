@@ -20,8 +20,8 @@ import com.google.common.collect.Streams;
 import javax.inject.Inject;
 import javax.inject.Provider;
 
-import static com.google.common.collect.ImmutableList.toImmutableList;
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.toList;
 
 public class PrestoSparkSessionPropertyManagerProvider
         implements Provider<SessionPropertyManager>
@@ -42,6 +42,6 @@ public class PrestoSparkSessionPropertyManagerProvider
         return new SessionPropertyManager(Streams.concat(
                 systemSessionProperties.getSessionProperties().stream(),
                 prestoSparkSessionProperties.getSessionProperties().stream())
-                .collect(toImmutableList()));
+                .collect(toList()));
     }
 }

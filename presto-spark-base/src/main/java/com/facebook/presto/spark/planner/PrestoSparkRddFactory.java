@@ -73,6 +73,7 @@ import javax.inject.Inject;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -105,15 +106,16 @@ import static com.facebook.presto.sql.planner.SystemPartitioningHandle.SOURCE_DI
 import static com.facebook.presto.sql.planner.optimizations.PlanNodeSearcher.searchFrom;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
-import static com.google.common.collect.ImmutableList.toImmutableList;
-import static com.google.common.collect.ImmutableMap.toImmutableMap;
-import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static com.google.common.collect.Multimaps.asMap;
 import static com.google.common.collect.Sets.difference;
 import static com.google.common.collect.Sets.union;
 import static java.lang.String.format;
 import static java.util.Collections.shuffle;
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.collectingAndThen;
+import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 
 public class PrestoSparkRddFactory
 {
@@ -182,7 +184,7 @@ public class PrestoSparkRddFactory
             }
 
             Map<PlanFragmentId, JavaPairRDD<MutablePartitionId, PrestoSparkMutableRow>> partitionedInputs = rddInputs.entrySet().stream()
-                    .collect(toImmutableMap(Entry::getKey, entry -> partitionBy(entry.getValue(), createPartitioner(session, partitioning))));
+                    .collect(toMap(Entry::getKey, entry -> partitionBy(entry.getValue(), createPartitioner(session, partitioning))));
 
             return createRdd(
                     sparkContext,
@@ -499,7 +501,7 @@ public class PrestoSparkRddFactory
                 .map(taskSourceJsonCodec::toJsonBytes)
                 .map(PrestoSparkUtils::compress)
                 .map(SerializedPrestoSparkTaskSource::new)
-                .collect(toImmutableList());
+                .collect(collectingAndThen(toList(), Collections::unmodifiableList));
     }
 
     private SetMultimap<Integer, ScheduledSplit> assignPartitionedSplits(Session session, PartitioningHandle partitioning, List<ScheduledSplit> splits)
@@ -548,7 +550,7 @@ public class PrestoSparkRddFactory
     private static Map<String, Broadcast<List<PrestoSparkSerializedPage>>> toTaskProcessorBroadcastInputs(Map<PlanFragmentId, Broadcast<List<PrestoSparkSerializedPage>>> broadcastInputs)
     {
         return broadcastInputs.entrySet().stream()
-                .collect(toImmutableMap(entry -> entry.getKey().toString(), Map.Entry::getValue));
+                .collect(collectingAndThen(toMap(entry -> entry.getKey().toString(), Map.Entry::getValue), Collections::unmodifiableMap));
     }
 
     private static void checkInputs(
@@ -559,7 +561,7 @@ public class PrestoSparkRddFactory
         Set<PlanFragmentId> expectedInputs = remoteSources.stream()
                 .map(RemoteSourceNode::getSourceFragmentIds)
                 .flatMap(List::stream)
-                .collect(toImmutableSet());
+                .collect(collectingAndThen(toSet(), Collections::unmodifiableSet));
 
         Set<PlanFragmentId> actualInputs = union(rddInputs.keySet(), broadcastInputs.keySet());
 

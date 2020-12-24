@@ -68,6 +68,7 @@ import org.apache.spark.SparkContext;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -92,8 +93,6 @@ import static com.facebook.presto.tests.QueryAssertions.copyTpchTables;
 import static com.facebook.presto.tpch.TpchMetadata.TINY_SCHEMA_NAME;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Throwables.throwIfUnchecked;
-import static com.google.common.collect.ImmutableList.toImmutableList;
-import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static io.airlift.tpch.TpchTable.getTables;
 import static io.airlift.units.Duration.nanosSince;
@@ -103,6 +102,9 @@ import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 import static java.util.UUID.randomUUID;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static java.util.stream.Collectors.collectingAndThen;
+import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
 
 public class PrestoSparkQueryRunner
         implements QueryRunner
@@ -373,7 +375,7 @@ public class PrestoSparkQueryRunner
         List<List<Object>> results = execution.execute();
         List<MaterializedRow> rows = results.stream()
                 .map(result -> new MaterializedRow(DEFAULT_PRECISION, result))
-                .collect(toImmutableList());
+                .collect(collectingAndThen(toList(), Collections::unmodifiableList));
 
         if (!execution.getUpdateType().isPresent()) {
             return new MaterializedResult(rows, execution.getOutputTypes());
@@ -394,7 +396,7 @@ public class PrestoSparkQueryRunner
     {
         ImmutableMap.Builder<String, Map<String, String>> catalogSessionProperties = ImmutableMap.builder();
         catalogSessionProperties.putAll(session.getConnectorProperties().entrySet().stream()
-                .collect(toImmutableMap(entry -> entry.getKey().getCatalogName(), Map.Entry::getValue)));
+                .collect(toMap(entry -> entry.getKey().getCatalogName(), Map.Entry::getValue)));
         catalogSessionProperties.putAll(session.getUnprocessedCatalogProperties());
         return new PrestoSparkSession(
                 session.getIdentity().getUser(),

@@ -27,6 +27,7 @@ import com.facebook.presto.spi.plan.PlanNodeId;
 import com.facebook.presto.sql.planner.OutputPartitioning;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -35,8 +36,9 @@ import static com.facebook.presto.common.block.PageBuilderStatus.DEFAULT_MAX_PAG
 import static com.facebook.presto.execution.buffer.PageSplitterUtil.splitPage;
 import static com.facebook.presto.spark.util.PrestoSparkUtils.createPagesSerde;
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.collect.ImmutableList.toImmutableList;
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.collectingAndThen;
+import static java.util.stream.Collectors.toList;
 
 public class PrestoSparkPageOutputOperator
         implements Operator
@@ -175,7 +177,7 @@ public class PrestoSparkPageOutputOperator
         List<PrestoSparkBufferedSerializedPage> serializedPages = splitPage(page, DEFAULT_MAX_PAGE_SIZE_IN_BYTES).stream()
                 .map(pagesSerde::serialize)
                 .map(PrestoSparkBufferedSerializedPage::new)
-                .collect(toImmutableList());
+                .collect(collectingAndThen(toList(), Collections::unmodifiableList));
 
         serializedPages.forEach(outputBuffer::enqueue);
     }
