@@ -258,13 +258,24 @@ public class PrestoSparkQueryExecutionFactory
     public IPrestoSparkQueryExecution create(
             SparkContext sparkContext,
             PrestoSparkSession prestoSparkSession,
-            String sql,
+            Optional<String> sqlText,
+            Optional<String> sqlLocation,
             Optional<String> sparkQueueName,
             PrestoSparkTaskExecutorFactoryProvider executorFactoryProvider,
             Optional<String> queryStatusInfoOutputLocation,
             Optional<String> queryDataOutputLocation)
     {
         PrestoSparkConfInitializer.checkInitialized(sparkContext);
+
+        String sql;
+        if (sqlText.isPresent()) {
+            checkArgument(!sqlLocation.isPresent(), "sqlText and sqlLocation should not be set at the same time");
+            sql = sqlText.get();
+        }
+        else {
+            checkArgument(sqlLocation.isPresent(), "sqlText or sqlLocation must be present");
+            sql = metadataStorage.read(sqlLocation.get());
+        }
 
         QueryStateTimer queryStateTimer = new QueryStateTimer(systemTicker());
 

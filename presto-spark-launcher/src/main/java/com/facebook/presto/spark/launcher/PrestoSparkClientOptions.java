@@ -17,8 +17,11 @@ import io.airlift.airline.Option;
 
 public class PrestoSparkClientOptions
 {
-    @Option(name = {"-f", "--file"}, title = "file", description = "sql file to execute", required = true)
+    @Option(name = {"-f", "--file"}, title = "file", description = "local sql file to execute")
     public String file;
+
+    @Option(name = {"-ef", "--externalFile"}, title = "externalFile", description = "external sql file location to execute")
+    public String externalFile;
 
     @Option(name = {"-p", "--package"}, title = "file", description = "presto-spark-package-*.tar.gz path", required = true)
     public String packagePath;

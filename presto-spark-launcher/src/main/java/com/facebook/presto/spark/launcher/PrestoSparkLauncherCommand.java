@@ -30,6 +30,7 @@ import static com.facebook.presto.spark.launcher.LauncherUtils.checkFile;
 import static com.facebook.presto.spark.launcher.LauncherUtils.loadCatalogProperties;
 import static com.facebook.presto.spark.launcher.LauncherUtils.loadProperties;
 import static com.facebook.presto.spark.launcher.LauncherUtils.readFileUtf8;
+import static com.google.common.base.Preconditions.checkArgument;
 
 @Command(name = "presto-spark-launcher", description = "Presto on Spark launcher")
 public class PrestoSparkLauncherCommand
@@ -63,7 +64,15 @@ public class PrestoSparkLauncherCommand
                 Optional.empty(),
                 Optional.empty());
 
-        String query = readFileUtf8(checkFile(new File(clientOptions.file)));
+        Optional<String> query;
+        if (clientOptions.file != null) {
+            checkArgument(clientOptions.externalFile == null, "file and externalFile should not be set at the same time");
+            query = Optional.of(readFileUtf8(checkFile(new File(clientOptions.file))));
+        }
+        else {
+            checkArgument(clientOptions.externalFile != null, "file or externalFile must be specified");
+            query = Optional.empty();
+        }
 
         try (PrestoSparkRunner runner = new PrestoSparkRunner(distribution)) {
             runner.run(
@@ -79,6 +88,7 @@ public class PrestoSparkLauncherCommand
                     ImmutableMap.of(),
                     ImmutableMap.of(),
                     query,
+                    Optional.ofNullable(clientOptions.externalFile),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
