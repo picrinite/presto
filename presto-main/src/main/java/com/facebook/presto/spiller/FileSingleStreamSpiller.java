@@ -90,7 +90,7 @@ public class FileSingleStreamSpiller
         this.memoryContext = requireNonNull(memoryContext, "memoryContext is null");
         this.spillCipher = requireNonNull(spillCipher, "spillCipher is null");
         checkState(!spillCipher.isPresent() || !spillCipher.get().isDestroyed(), "spillCipher is already destroyed");
-        this.spillCipher.ifPresent(cipher -> closer.register(cipher::destroy));
+        // this.spillCipher.ifPresent(cipher -> closer.register(cipher::destroy));
         // HACK!
         // The writePages() method is called in a separate thread pool and it's possible that
         // these spiller thread can run concurrently with the close() method.
@@ -103,7 +103,7 @@ public class FileSingleStreamSpiller
         // middle of execution when close() is called (note that this applies to both readPages() and writePages() methods).
         this.memoryContext.setBytes(BUFFER_SIZE);
         try {
-            this.targetFile = closer.register(new FileHolder(Files.createTempFile(spillPath, SPILL_FILE_PREFIX, SPILL_FILE_SUFFIX)));
+            this.targetFile = new FileHolder(Files.createTempFile(spillPath, SPILL_FILE_PREFIX, SPILL_FILE_SUFFIX));
         }
         catch (IOException e) {
             throw new PrestoException(GENERIC_INTERNAL_ERROR, "Failed to create spill file", e);

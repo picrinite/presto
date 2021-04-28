@@ -101,6 +101,7 @@ public class FileSingleStreamSpillerFactory
         spillPaths.forEach(path -> {
             try {
                 createDirectories(path);
+                System.out.println("spill path: " + path);
             }
             catch (IOException e) {
                 throw new IllegalArgumentException(

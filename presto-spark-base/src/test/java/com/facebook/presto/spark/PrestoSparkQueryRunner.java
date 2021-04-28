@@ -69,6 +69,7 @@ import org.apache.spark.SparkContext;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -202,9 +203,18 @@ public class PrestoSparkQueryRunner
 
         ImmutableMap.Builder<String, String> configProperties = ImmutableMap.builder();
         configProperties.put("presto.version", "testversion");
+        // configProperties.put("query.max-memory-per-node", "1MB");
         configProperties.put("query.hash-partition-count", Integer.toString(NODE_COUNT * 2));
         configProperties.put("task.writer-count", Integer.toString(2));
+        configProperties.put("task.concurrency", "2");
         configProperties.put("task.partitioned-writer-count", Integer.toString(4));
+        configProperties.put("experimental.spill-enabled", "true");
+        configProperties.put("experimental.join-spill-enabled", "true");
+        // configProperties.put("experimental.temp-storage-buffer-size", "4B");
+        configProperties.put("experimental.memory-revoking-threshold", "0.0");
+        // configProperties.put("experimental.spiller.single-stream-spiller-choice", "LOCAL_FILE");
+        configProperties.put("experimental.spiller-spill-path", Paths.get(System.getProperty("java.io.tmpdir"), "presto", "spills").toString());
+        configProperties.put("experimental.aggregation-operator-unspill-memory-limit", "128kB");
         configProperties.putAll(additionalConfigProperties);
 
         PrestoSparkInjectorFactory injectorFactory = new PrestoSparkInjectorFactory(

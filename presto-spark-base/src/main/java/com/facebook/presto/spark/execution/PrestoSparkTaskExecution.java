@@ -143,7 +143,7 @@ public class PrestoSparkTaskExecution
         taskHandle = createTaskHandle(taskStateMachine, taskContext, localExecutionPlan, taskExecutor);
 
         requireNonNull(memoryUpdateExecutor, "memoryUpdateExecutor is null");
-        memoryUpdateExecutor.schedule(taskContext::updatePeakMemory, 1, SECONDS);
+        memoryUpdateExecutor.scheduleAtFixedRate(taskContext::updatePeakMemory, 0, 1, SECONDS);
     }
 
     // this is a separate method to ensure that the `this` reference is not leaked during construction

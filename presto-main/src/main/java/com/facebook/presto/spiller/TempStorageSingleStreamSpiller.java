@@ -194,7 +194,7 @@ public class TempStorageSingleStreamSpiller
             closer.register(() -> dataSink.rollback());
         }
         if (tempStorageHandle != null) {
-            closer.register(() -> tempStorage.remove(tempDataOperationContext, tempStorageHandle));
+            // closer.register(() -> tempStorage.remove(tempDataOperationContext, tempStorageHandle));
         }
 
         closer.register(localSpillContext);

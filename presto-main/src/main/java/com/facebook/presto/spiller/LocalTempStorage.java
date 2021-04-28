@@ -85,6 +85,7 @@ public class LocalTempStorage
         spillPaths.forEach(path -> {
             try {
                 createDirectories(path);
+                System.out.println("spill path: " + path);
             }
             catch (IOException e) {
                 throw new IllegalArgumentException(
@@ -119,7 +120,7 @@ public class LocalTempStorage
     public void remove(TempDataOperationContext context, TempStorageHandle handle)
             throws IOException
     {
-        Files.delete(((LocalTempStorageHandle) handle).getFilePath());
+        // Files.delete(((LocalTempStorageHandle) handle).getFilePath());
     }
 
     @Override
