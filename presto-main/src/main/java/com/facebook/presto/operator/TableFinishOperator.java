@@ -524,7 +524,8 @@ public class TableFinishOperator
             {
                 this.taskId = requireNonNull(taskId, "taskId is null");
                 this.operatorRetainedMemoryBytes = requireNonNull(operatorRetainedMemoryBytes, "operatorRetainedMemoryBytes is null");
-                this.statisticsPages = trackStatisticsPages ? Optional.of(ImmutableList.builder()) : Optional.empty();
+                // this.statisticsPages = trackStatisticsPages ? Optional.of(ImmutableList.builder()) : Optional.empty();
+                this.statisticsPages = Optional.of(ImmutableList.builder());
             }
 
             public void update(Page page)
@@ -577,9 +578,9 @@ public class TableFinishOperator
 
             public void resetStatisticsPages()
             {
-                statisticsPages = Optional.empty();
-                operatorRetainedMemoryBytes.addAndGet(-retainedMemoryBytesForStatisticsPages);
-                retainedMemoryBytesForStatisticsPages = 0;
+                // statisticsPages = Optional.empty();
+                // operatorRetainedMemoryBytes.addAndGet(-retainedMemoryBytesForStatisticsPages);
+                // retainedMemoryBytesForStatisticsPages = 0;
             }
         }
     }
