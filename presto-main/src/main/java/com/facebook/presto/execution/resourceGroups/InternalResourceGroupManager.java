@@ -51,6 +51,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -86,6 +87,7 @@ public final class InternalResourceGroupManager<C>
     private final AtomicLong lastCpuQuotaGenerationNanos = new AtomicLong(System.nanoTime());
     private final Map<String, ResourceGroupConfigurationManagerFactory> configurationManagerFactories = new ConcurrentHashMap<>();
     private final AtomicBoolean taskLimitExceeded = new AtomicBoolean();
+    private final AtomicInteger totalRunningTaskCount = new AtomicInteger();
     private final int maxTotalRunningTaskCountToNotExecuteNewQuery;
     private final AtomicLong lastSchedulingCycleRunTimeMs = new AtomicLong(currentTimeMillis());
 
@@ -219,8 +221,9 @@ public final class InternalResourceGroupManager<C>
             lastCpuQuotaGenerationNanos.set(nanoTime);
         }
 
+        totalRunningTaskCount.set(getTotalRunningTaskCount());
         if (maxTotalRunningTaskCountToNotExecuteNewQuery != Integer.MAX_VALUE) {
-            taskLimitExceeded.set(getTotalRunningTaskCount() > maxTotalRunningTaskCountToNotExecuteNewQuery);
+            taskLimitExceeded.set(totalRunningTaskCount.get() > maxTotalRunningTaskCountToNotExecuteNewQuery);
         }
 
         for (RootInternalResourceGroup group : rootGroups) {
@@ -318,6 +321,12 @@ public final class InternalResourceGroupManager<C>
     public int getTaskLimitExceeded()
     {
         return taskLimitExceeded.get() ? 1 : 0;
+    }
+
+    @Managed
+    public int getTotalTaskCount()
+    {
+        return totalRunningTaskCount.get();
     }
 
     private int getTotalRunningTaskCount()
