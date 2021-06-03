@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.operator;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.common.Page;
 import com.facebook.presto.execution.Lifespan;
 import com.facebook.presto.memory.context.LocalMemoryContext;
@@ -31,6 +32,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,11 +41,13 @@ import java.util.OptionalLong;
 import java.util.Queue;
 
 import static com.facebook.airlift.concurrent.MoreFutures.getDone;
+import static com.facebook.presto.SystemSessionProperties.isSpillInSmallMemoryPool;
 import static com.facebook.presto.operator.SpillingUtils.checkSpillSucceeded;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Verify.verify;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
+import static io.airlift.units.DataSize.succinctBytes;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -194,6 +198,7 @@ public class HashBuilderOperator
         CLOSED
     }
 
+    private static final Logger log = Logger.get(HashBuilderOperator.class);
     private static final double INDEX_COMPACTION_ON_REVOCATION_TARGET = 0.8;
 
     private final OperatorContext operatorContext;
@@ -290,25 +295,25 @@ public class HashBuilderOperator
     {
         switch (state) {
             case CONSUMING_INPUT:
+            case CLOSED:
                 return NOT_BLOCKED;
 
             case SPILLING_INPUT:
                 return spillInProgress;
 
+            case INPUT_UNSPILLING:
+                if (isSpillInSmallMemoryPool(operatorContext.getSession())) {
+                    return NOT_BLOCKED;
+                }
+                return unspillInProgress.orElseThrow(() -> new IllegalStateException("Unspilling in progress, but unspilling future not set"));
             case LOOKUP_SOURCE_BUILT:
                 return lookupSourceNotNeeded.orElseThrow(() -> new IllegalStateException("Lookup source built, but disposal future not set"));
 
             case INPUT_SPILLED:
                 return spilledLookupSourceHandle.getUnspillingOrDisposeRequested();
 
-            case INPUT_UNSPILLING:
-                return unspillInProgress.orElseThrow(() -> new IllegalStateException("Unspilling in progress, but unspilling future not set"));
-
             case INPUT_UNSPILLED_AND_BUILT:
                 return spilledLookupSourceHandle.getDisposeRequested();
-
-            case CLOSED:
-                return NOT_BLOCKED;
         }
         throw new IllegalStateException("Unhandled state: " + state);
     }
@@ -538,10 +543,14 @@ public class HashBuilderOperator
         }
 
         verify(spiller.isPresent());
-        verify(!unspillInProgress.isPresent());
-
-        localUserMemoryContext.setBytes(getSpiller().getSpilledPagesInMemorySize() + index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
-        unspillInProgress = Optional.of(getSpiller().getAllSpilledPages());
+        if (isSpillInSmallMemoryPool(operatorContext.getSession())) {
+            localUserMemoryContext.setBytes(index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
+        }
+        else {
+            verify(!unspillInProgress.isPresent());
+            localUserMemoryContext.setBytes(getSpiller().getSpilledPagesInMemorySize() + index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
+            unspillInProgress = Optional.of(getSpiller().getAllSpilledPages());
+        }
 
         state = State.INPUT_UNSPILLING;
     }
@@ -549,24 +558,43 @@ public class HashBuilderOperator
     private void finishLookupSourceUnspilling()
     {
         checkState(state == State.INPUT_UNSPILLING);
-        if (!unspillInProgress.get().isDone()) {
-            // Pages have not be unspilled yet.
-            return;
+        if (isSpillInSmallMemoryPool(operatorContext.getSession())) {
+            Iterator<Page> unSpillPageIterator = getSpiller().getSpilledPages();
+            long totalUnSpilledPageSize = 0;
+            long totalUnSpilledPageRetainedSize = 0;
+            while (unSpillPageIterator.hasNext()) {
+                Page page = unSpillPageIterator.next();
+                totalUnSpilledPageSize += page.getSizeInBytes();
+                totalUnSpilledPageRetainedSize += page.getRetainedSizeInBytes();
+                index.addPage(page);
+                localUserMemoryContext.setBytes(index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
+            }
+            // TODO Use OperatorStatistics to record spilled data size for each partition
+            log.info(
+                    "UnSpill completes for partition %d, totalUnSpilledPageSize %s, totalUnSpilledPageRetainedSize %s",
+                    partitionIndex,
+                    succinctBytes(totalUnSpilledPageSize),
+                    succinctBytes(totalUnSpilledPageRetainedSize));
         }
-
-        // Use Queue so that Pages already consumed by Index are not retained by us.
-        Queue<Page> pages = new ArrayDeque<>(getDone(unspillInProgress.get()));
-        long memoryRetainedByRemainingPages = pages.stream()
-                .mapToLong(Page::getRetainedSizeInBytes)
-                .sum();
-        localUserMemoryContext.setBytes(memoryRetainedByRemainingPages + index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
-
-        while (!pages.isEmpty()) {
-            Page next = pages.remove();
-            index.addPage(next);
-            // There is no attempt to compact index, since unspilled pages are unlikely to have blocks with retained size > logical size.
-            memoryRetainedByRemainingPages -= next.getRetainedSizeInBytes();
+        else {
+            if (!unspillInProgress.get().isDone()) {
+                // Pages have not be unspilled yet.
+                return;
+            }
+            // Use Queue so that Pages already consumed by Index are not retained by us.
+            Queue<Page> pages = new ArrayDeque<>(getDone(unspillInProgress.get()));
+            long memoryRetainedByRemainingPages = pages.stream()
+                    .mapToLong(Page::getRetainedSizeInBytes)
+                    .sum();
             localUserMemoryContext.setBytes(memoryRetainedByRemainingPages + index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
+
+            while (!pages.isEmpty()) {
+                Page next = pages.remove();
+                index.addPage(next);
+                // There is no attempt to compact index, since unspilled pages are unlikely to have blocks with retained size > logical size.
+                memoryRetainedByRemainingPages -= next.getRetainedSizeInBytes();
+                localUserMemoryContext.setBytes(memoryRetainedByRemainingPages + index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
+            }
         }
 
         LookupSourceSupplier partition = buildLookupSource();
