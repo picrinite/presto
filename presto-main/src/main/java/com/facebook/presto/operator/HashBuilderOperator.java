@@ -29,21 +29,20 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 import java.io.IOException;
-import java.util.ArrayDeque;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
-import java.util.Queue;
 
-import static com.facebook.airlift.concurrent.MoreFutures.getDone;
 import static com.facebook.presto.operator.SpillingUtils.checkSpillSucceeded;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Verify.verify;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
+import static io.airlift.units.DataSize.succinctBytes;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -222,7 +221,9 @@ public class HashBuilderOperator
     private final SpilledLookupSourceHandle spilledLookupSourceHandle = new SpilledLookupSourceHandle();
     private Optional<SingleStreamSpiller> spiller = Optional.empty();
     private ListenableFuture<?> spillInProgress = NOT_BLOCKED;
-    private Optional<ListenableFuture<List<Page>>> unspillInProgress = Optional.empty();
+    private Optional<Iterator<Page>> unspillPageIterator = Optional.empty();
+    private long totalSpilledPageSize;
+    private long totalSpilledPageRetainedSize;
     @Nullable
     private LookupSourceSupplier lookupSourceSupplier;
     private OptionalLong lookupSourceChecksum = OptionalLong.empty();
@@ -290,6 +291,8 @@ public class HashBuilderOperator
     {
         switch (state) {
             case CONSUMING_INPUT:
+            case INPUT_UNSPILLING:
+            case CLOSED:
                 return NOT_BLOCKED;
 
             case SPILLING_INPUT:
@@ -301,14 +304,8 @@ public class HashBuilderOperator
             case INPUT_SPILLED:
                 return spilledLookupSourceHandle.getUnspillingOrDisposeRequested();
 
-            case INPUT_UNSPILLING:
-                return unspillInProgress.orElseThrow(() -> new IllegalStateException("Unspilling in progress, but unspilling future not set"));
-
             case INPUT_UNSPILLED_AND_BUILT:
                 return spilledLookupSourceHandle.getDisposeRequested();
-
-            case CLOSED:
-                return NOT_BLOCKED;
         }
         throw new IllegalStateException("Unhandled state: " + state);
     }
@@ -361,6 +358,8 @@ public class HashBuilderOperator
     {
         checkState(spillInProgress.isDone(), "Previous spill still in progress");
         checkSpillSucceeded(spillInProgress);
+        totalSpilledPageSize += page.getSizeInBytes();
+        totalSpilledPageRetainedSize += page.getRetainedSizeInBytes();
         spillInProgress = getSpiller().spill(page);
     }
 
@@ -527,6 +526,8 @@ public class HashBuilderOperator
         }
         checkSpillSucceeded(spillInProgress);
         state = State.INPUT_SPILLED;
+        System.out.printf("totalSpilledPageSize when state changes to INPUT_SPILLED: %s \n", succinctBytes(totalSpilledPageSize));
+        System.out.printf("totalSpilledPageRetainedSize when state changes to INPUT_SPILLED: %s \n", succinctBytes(totalSpilledPageRetainedSize));
     }
 
     private void unspillLookupSourceIfRequested()
@@ -538,10 +539,10 @@ public class HashBuilderOperator
         }
 
         verify(spiller.isPresent());
-        verify(!unspillInProgress.isPresent());
+        verify(!unspillPageIterator.isPresent());
 
-        localUserMemoryContext.setBytes(getSpiller().getSpilledPagesInMemorySize() + index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
-        unspillInProgress = Optional.of(getSpiller().getAllSpilledPages());
+        localUserMemoryContext.setBytes(index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
+        unspillPageIterator = Optional.of(getSpiller().getSpilledPages());
 
         state = State.INPUT_UNSPILLING;
     }
@@ -549,25 +550,27 @@ public class HashBuilderOperator
     private void finishLookupSourceUnspilling()
     {
         checkState(state == State.INPUT_UNSPILLING);
-        if (!unspillInProgress.get().isDone()) {
-            // Pages have not be unspilled yet.
+        if (!unspillPageIterator.isPresent()) {
             return;
         }
 
-        // Use Queue so that Pages already consumed by Index are not retained by us.
-        Queue<Page> pages = new ArrayDeque<>(getDone(unspillInProgress.get()));
-        long memoryRetainedByRemainingPages = pages.stream()
-                .mapToLong(Page::getRetainedSizeInBytes)
-                .sum();
-        localUserMemoryContext.setBytes(memoryRetainedByRemainingPages + index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
-
-        while (!pages.isEmpty()) {
-            Page next = pages.remove();
-            index.addPage(next);
-            // There is no attempt to compact index, since unspilled pages are unlikely to have blocks with retained size > logical size.
-            memoryRetainedByRemainingPages -= next.getRetainedSizeInBytes();
-            localUserMemoryContext.setBytes(memoryRetainedByRemainingPages + index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
+        long totalSpilledPageSize = 0;
+        long totalSpilledPageRetainedSize = 0;
+        while (unspillPageIterator.get().hasNext()) {
+            Page page = unspillPageIterator.get().next();
+            totalSpilledPageSize += page.getSizeInBytes();
+            totalSpilledPageRetainedSize += page.getRetainedSizeInBytes();
+            index.addPage(page);
+            if (!localUserMemoryContext.trySetBytes(index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit)) {
+                index.compact();
+                localUserMemoryContext.setBytes(index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
+            }
+//            // There is no attempt to compact index, since unspilled pages are unlikely to have blocks with retained size > logical size.
+//            localUserMemoryContext.setBytes(index.getEstimatedSize().toBytes(), enforceBroadcastMemoryLimit);
         }
+
+        System.out.printf("totalSpilledPageSize: %s \n", succinctBytes(totalSpilledPageSize));
+        System.out.printf("totalSpilledPageRetainedSize: %s \n", succinctBytes(totalSpilledPageRetainedSize));
 
         LookupSourceSupplier partition = buildLookupSource();
         lookupSourceChecksum.ifPresent(checksum ->
