@@ -116,6 +116,7 @@ public final class SystemSessionProperties
     public static final String FAST_INEQUALITY_JOINS = "fast_inequality_joins";
     public static final String QUERY_PRIORITY = "query_priority";
     public static final String SPILL_ENABLED = "spill_enabled";
+    public static final String SPILL_IN_SMALL_MEMORY_POOL = "spill_in_small_memory_pool";
     public static final String JOIN_SPILL_ENABLED = "join_spill_enabled";
     public static final String AGGREGATION_OPERATOR_UNSPILL_MEMORY_LIMIT = "aggregation_operator_unspill_memory_limit";
     public static final String TEMP_STORAGE_SPILLER_BUFFER_SIZE = "temp_storage_spiller_buffer_size";
@@ -583,6 +584,11 @@ public final class SystemSessionProperties
                             return spillEnabled;
                         },
                         value -> value),
+                booleanProperty(
+                        SPILL_IN_SMALL_MEMORY_POOL,
+                        "Should use spilling strategy that fits in memory pool with small heap size",
+                        nodeSpillConfig.isSpillInSmallMemoryPool(),
+                        false),
                 booleanProperty(
                         JOIN_SPILL_ENABLED,
                         "Enable join spilling",
@@ -1307,6 +1313,11 @@ public final class SystemSessionProperties
     public static boolean isSpillEnabled(Session session)
     {
         return session.getSystemProperty(SPILL_ENABLED, Boolean.class);
+    }
+
+    public static boolean isSpillInSmallMemoryPool(Session session)
+    {
+        return session.getSystemProperty(SPILL_IN_SMALL_MEMORY_POOL, Boolean.class);
     }
 
     public static boolean isJoinSpillingEnabled(Session session)

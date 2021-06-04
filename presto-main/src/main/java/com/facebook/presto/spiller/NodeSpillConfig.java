@@ -14,6 +14,7 @@
 package com.facebook.presto.spiller;
 
 import com.facebook.airlift.configuration.Config;
+import com.facebook.airlift.configuration.ConfigDescription;
 import io.airlift.units.DataSize;
 
 import javax.validation.constraints.NotNull;
@@ -27,6 +28,7 @@ public class NodeSpillConfig
 
     private boolean spillCompressionEnabled;
     private boolean spillEncryptionEnabled;
+    private boolean spillInSmallMemoryPool;
 
     @NotNull
     public DataSize getMaxSpillPerNode()
@@ -101,6 +103,19 @@ public class NodeSpillConfig
     public NodeSpillConfig setTempStorageBufferSize(DataSize tempStorageBufferSize)
     {
         this.tempStorageBufferSize = tempStorageBufferSize;
+        return this;
+    }
+
+    public boolean isSpillInSmallMemoryPool()
+    {
+        return spillInSmallMemoryPool;
+    }
+
+    @Config("experimental.spill-in-small-memory-pool")
+    @ConfigDescription("Should use spilling strategy that fits in memory pool with small heap size")
+    public NodeSpillConfig setSpillInSmallMemoryPool(boolean spillInSmallMemoryPool)
+    {
+        this.spillInSmallMemoryPool = spillInSmallMemoryPool;
         return this;
     }
 }
