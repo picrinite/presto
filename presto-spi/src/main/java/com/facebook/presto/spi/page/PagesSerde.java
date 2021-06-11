@@ -15,6 +15,7 @@ package com.facebook.presto.spi.page;
 
 import com.facebook.presto.common.Page;
 import com.facebook.presto.common.block.BlockEncodingSerde;
+import com.facebook.presto.common.slice.BasicSliceInput;
 import com.facebook.presto.spi.spiller.SpillCipher;
 import io.airlift.slice.DynamicSliceOutput;
 import io.airlift.slice.Slice;
@@ -104,7 +105,7 @@ public class PagesSerde
             slice = Slices.wrappedBuffer(decompressionBuffer);
         }
 
-        return readRawPage(serializedPage.getPositionCount(), slice.getInput(), blockEncodingSerde);
+        return readRawPage(serializedPage.getPositionCount(), new BasicSliceInput(slice), blockEncodingSerde);
     }
 
     public long getSizeInBytes()

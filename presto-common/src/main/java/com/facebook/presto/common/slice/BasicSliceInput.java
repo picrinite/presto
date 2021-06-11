@@ -164,7 +164,7 @@ public class BasicSliceInput
         if (length == 0) {
             return Slices.EMPTY_SLICE;
         }
-        Slice newSlice = slice.slice(position, length);
+        Slice newSlice = Slices.copyOf(slice, position, length);
         position += length;
         return newSlice;
     }
