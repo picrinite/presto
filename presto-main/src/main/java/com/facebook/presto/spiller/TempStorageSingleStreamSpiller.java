@@ -181,8 +181,9 @@ public class TempStorageSingleStreamSpiller
             tempStorageHandle = dataSink.commit();
 
             InputStream input = closer.register(tempStorage.open(tempDataOperationContext, tempStorageHandle));
-            Iterator<Page> pages = PagesSerdeUtil.readPages(serde, new InputStreamSliceInput(input));
-            return closeWhenExhausted(pages, input);
+            Iterator<Page> deserializedPages = PagesSerdeUtil.readPages(serde, new InputStreamSliceInput(input));
+            Iterator<Page> compactPages = new SpillerUtil.CompactPageIterator(deserializedPages);
+            return closeWhenExhausted(compactPages, input);
         }
         catch (IOException e) {
             throw new PrestoException(GENERIC_INTERNAL_ERROR, "Failed to read spilled pages", e);

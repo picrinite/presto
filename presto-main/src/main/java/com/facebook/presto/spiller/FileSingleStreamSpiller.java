@@ -168,8 +168,9 @@ public class FileSingleStreamSpiller
 
         try {
             InputStream input = closer.register(targetFile.newInputStream());
-            Iterator<Page> pages = PagesSerdeUtil.readPages(serde, new InputStreamSliceInput(input, BUFFER_SIZE));
-            return closeWhenExhausted(pages, input);
+            Iterator<Page> deserializedPages = PagesSerdeUtil.readPages(serde, new InputStreamSliceInput(input, BUFFER_SIZE));
+            Iterator<Page> compactPages = new SpillerUtil.CompactPageIterator(deserializedPages);
+            return closeWhenExhausted(compactPages, input);
         }
         catch (IOException e) {
             throw new PrestoException(GENERIC_INTERNAL_ERROR, "Failed to read spilled pages", e);
